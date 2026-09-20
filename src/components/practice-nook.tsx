@@ -52,31 +52,88 @@ export function PracticeNook() {
           stroke="#916d48"
           strokeWidth="1.8"
         />
-        <g transform="rotate(15 154 137)">
+        <ellipse cx="123" cy="201" rx="26" ry="3" fill="#b49b79" opacity=".2" />
+        {/* Keep the neck, sound hole and bridge on one axis before leaning the guitar. */}
+        <g transform="translate(122 200) rotate(17)">
           <path
-            d="M132 133c-15-13-23-1-22 11 1 8 6 10 4 17-10 15-4 30 10 34 13 5 28-3 32-16 2-10-6-19-3-25 9-15 7-29-6-29-8 0-9 8-15 8Z"
+            d="M-6-77C-14-82-26-72-25-61c0 9 10 12 9 20-1 7-13 9-13 21C-29-6-15 1 0 1S29-6 29-20c0-12-12-14-13-21-1-8 9-11 9-20 1-11-11-21-19-16Z"
             fill="#d5a166"
             stroke="#8a603d"
             strokeWidth="2"
+            strokeLinejoin="round"
           />
-          <path d="M142 132V78h10v60" fill="#916543" stroke="#795539" strokeWidth="1.6" />
-          <path d="m142 80-1-18 13-1-2 20" fill="#ad7a4f" stroke="#795539" strokeWidth="1.6" />
           <path
-            d="m138 67 3 0m-3 8 3 0m14-9 3 0m-4 8 3 0"
-            stroke="#79634d"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <circle cx="135" cy="154" r="10" fill="#684b35" stroke="#e5bc85" strokeWidth="3" />
-          <path d="M121 179h23" stroke="#795335" strokeWidth="5" strokeLinecap="round" />
-          <path d="m146 80-13 97m16-97-14 97" stroke="#eddbc0" strokeWidth=".8" />
-          <path d="m142 99 10 1m-11 10 10 1m-12 9 10 1" stroke="#d4b898" strokeWidth=".8" />
-          <path
-            d="M115 166c-5 9 0 19 6 22"
+            d="M-23-23c-1 11 8 17 18 18"
             stroke="#e7bc85"
             strokeWidth="2"
             strokeLinecap="round"
           />
+          <path d="M-5-124H5l2 50H-7Z" fill="#ad7a4f" stroke="#795539" strokeWidth="1.5" />
+          <path
+            d="M-7-124-9-144q0-2 2-2H7q2 0 2 2l-2 20Z"
+            fill="#ad7a4f"
+            stroke="#795539"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          {[-140, -134, -128].map((y) => (
+            <g key={y}>
+              <path d={`M-8 ${y}h-4m20 0h4`} stroke="#79634d" strokeWidth="1.4" />
+              <ellipse
+                cx="-12"
+                cy={y}
+                rx="1.6"
+                ry="2"
+                fill="#bca27c"
+                stroke="#79634d"
+                strokeWidth=".8"
+              />
+              <ellipse
+                cx="12"
+                cy={y}
+                rx="1.6"
+                ry="2"
+                fill="#bca27c"
+                stroke="#79634d"
+                strokeWidth=".8"
+              />
+              <circle cx="-4" cy={y} r="1" fill="#e3d1ad" />
+              <circle cx="4" cy={y} r="1" fill="#e3d1ad" />
+            </g>
+          ))}
+          <path d="M-4.7-124h9.4L6.3-59H-6.3Z" fill="#795539" />
+          {Array.from({ length: 16 }, (_, index) => {
+            const y = -124 + 103 * (1 - 2 ** (-(index + 1) / 12));
+            const halfWidth = 4.7 + ((y + 124) / 65) * 1.6;
+            return (
+              <path
+                key={index}
+                d={`M${-halfWidth} ${y}H${halfWidth}`}
+                stroke="#c4aa83"
+                strokeWidth=".6"
+              />
+            );
+          })}
+          <circle cy="-45" r="10" fill="#e5bc85" stroke="#a77a4a" strokeWidth="1" />
+          <circle cy="-45" r="7.4" fill="#684b35" />
+          <path d="M-12-24q-2 0-2 2v4q0 2 2 2h24q2 0 2-2v-4q0-2-2-2Z" fill="#795335" />
+          <path d="M-5-124H5m-10 102H5" stroke="#f1dfbd" strokeWidth="1.5" />
+          {Array.from({ length: 6 }, (_, index) => {
+            const nutX = -3.25 + index * 1.3;
+            const bridgeX = -4 + index * 1.6;
+            const postX = index < 3 ? -4 : 4;
+            const postY = [-128, -134, -140, -140, -134, -128][index];
+            return (
+              <g key={index}>
+                <path
+                  d={`M${postX} ${postY} ${nutX} -124 ${bridgeX} -19`}
+                  stroke="#eddbc0"
+                  strokeWidth={index < 3 ? ".5" : ".35"}
+                />
+                <circle cx={bridgeX} cy="-18.5" r=".65" fill="#e5c897" />
+              </g>
+            );
+          })}
         </g>
         <path
           d="M251 183c-5-19-1-35 6-44m-2 23c-17-1-22-13-17-20 10 3 17 12 17 20Zm2-15c-2-11 3-22 10-22 2 10-2 17-10 22Zm-1 25c2-15 14-19 21-15-2 11-10 16-21 15Z"
