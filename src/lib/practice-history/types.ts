@@ -1,6 +1,6 @@
 export type PracticeContext = "chord-trainer" | "progression";
 export type ObservationResult = "correct" | "incorrect" | "reported-miss" | "uncertain";
-export type ObservationSource = "fret-selection" | "keyboard" | "microphone";
+export type ObservationSource = "fret-selection" | "keyboard" | "microphone" | "session-review";
 
 export type PracticeObservation = {
   schemaVersion: 1;
@@ -37,6 +37,8 @@ export type PracticeSession = {
   correct: number;
   misses: number;
   algorithmVersion: 2;
+  feedbackMode?: "after-session" | "live";
+  reviewedAt?: string;
 };
 
 export type SavedRoutine = {
@@ -57,6 +59,10 @@ export type PracticePreferences = {
   experience: "beginner" | "returning";
   dailyGoal: number;
   showWelcome: boolean;
+  feedbackMode: "after-session" | "live";
+  chordRepeats: number;
+  curriculumVersion: 3;
+  earnedLevel: number;
 };
 
 export const DEFAULT_PREFERENCES: PracticePreferences = {
@@ -68,6 +74,10 @@ export const DEFAULT_PREFERENCES: PracticePreferences = {
   experience: "beginner",
   dailyGoal: 5,
   showWelcome: true,
+  feedbackMode: "after-session",
+  chordRepeats: 1,
+  curriculumVersion: 3,
+  earnedLevel: 1,
 };
 
 export type SkillSummary = {

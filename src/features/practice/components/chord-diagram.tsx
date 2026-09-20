@@ -1,6 +1,8 @@
 import type { GuitarVoicing } from "@/lib/music/types";
 
 export function ChordDiagram({ voicing }: { voicing: GuitarVoicing }) {
+  const fretted = voicing.frets.filter((f): f is number => f !== null && f > 0);
+  const firstFret = Math.max(...fretted) > 4 ? Math.min(...fretted) : 1;
   return (
     <svg
       className="chord-diagram"
@@ -10,12 +12,21 @@ export function ChordDiagram({ voicing }: { voicing: GuitarVoicing }) {
     >
       <g fill="none" stroke="currentColor" opacity="0.7">
         {[0, 1, 2, 3, 4].map((i) => (
-          <path d={`M25 ${42 + i * 34}H155`} strokeWidth={i === 0 ? 5 : 1} key={`f${i}`} />
+          <path
+            d={`M25 ${42 + i * 34}H155`}
+            strokeWidth={i === 0 && firstFret === 1 ? 5 : 1}
+            key={`f${i}`}
+          />
         ))}
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <path d={`M${25 + i * 26} 42V178`} strokeWidth={i < 2 ? 1.8 : 1.2} key={`s${i}`} />
         ))}
       </g>
+      {firstFret > 1 && (
+        <text x="8" y="64" textAnchor="middle" fontSize="11" fill="currentColor">
+          {firstFret}
+        </text>
+      )}
       {voicing.frets.map((fret, i) =>
         fret === null ? (
           <text x={25 + i * 26} y="25" textAnchor="middle" className="diagram-muted" key={i}>
@@ -33,10 +44,15 @@ export function ChordDiagram({ voicing }: { voicing: GuitarVoicing }) {
           />
         ) : (
           <g key={i}>
-            <circle cx={25 + i * 26} cy={42 + (fret - 0.5) * 34} r="10.5" fill="currentColor" />
+            <circle
+              cx={25 + i * 26}
+              cy={42 + (fret - firstFret + 0.5) * 34}
+              r="10.5"
+              fill="currentColor"
+            />
             <text
               x={25 + i * 26}
-              y={46 + (fret - 0.5) * 34}
+              y={46 + (fret - firstFret + 0.5) * 34}
               textAnchor="middle"
               fill="var(--surface)"
               fontSize="10"

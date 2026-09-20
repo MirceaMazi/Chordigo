@@ -1,6 +1,8 @@
 import { applyObservationToSkill } from "./skill-summary";
 import { DEFAULT_PREFERENCES } from "./types";
 import { parsePracticeBackup } from "./backup";
+import { legacyEarnedLevel } from "@/features/practice/domain/curriculum";
+import { buildSessionReview, type ReviewAnswers } from "@/features/practice/domain/session-review";
 import type {
   ObservationDraft,
   PracticeObservation,
@@ -118,13 +120,80 @@ export const listObservations = () => list<PracticeObservation>("observations");
 export const listSessions = () => list<PracticeSession>("sessions");
 export const listRoutines = () => list<SavedRoutine>("routines");
 export const saveSession = (session: PracticeSession) => put("sessions", session);
+
+export async function reviewPracticeSession(
+  id: string,
+  answers: ReviewAnswers,
+): Promise<PracticeSession> {
+  const db = await openDatabase();
+  const tx = db.transaction(["sessions", "observations", "skills"], "readwrite");
+  const done = transactionCompleted(tx);
+  let reviewed: PracticeSession | undefined;
+  let validationError: unknown;
+  const sessions = tx.objectStore("sessions");
+  const request = sessions.get(id);
+  request.onsuccess = () => {
+    try {
+      const session = request.result as PracticeSession | undefined;
+      if (!session) throw new Error("Save the session before reviewing it. Try saving again.");
+      if (session.reviewedAt) {
+        reviewed = session;
+        return;
+      }
+      const review = buildSessionReview(session, answers, new Date().toISOString());
+      reviewed = review.session;
+      const observations = tx.objectStore("observations");
+      const grouped = new Map<string, PracticeObservation[]>();
+      for (const observation of review.observations) {
+        observations.add(observation);
+        grouped.set(observation.expectedVoicingId, [
+          ...(grouped.get(observation.expectedVoicingId) ?? []),
+          observation,
+        ]);
+      }
+      const skills = tx.objectStore("skills");
+      for (const [voicingId, items] of grouped) {
+        const previous = skills.get(voicingId);
+        previous.onsuccess = () => {
+          let summary = previous.result as SkillSummary | undefined;
+          for (const item of items) summary = applyObservationToSkill(summary, item);
+          skills.put(summary);
+        };
+      }
+      sessions.put(review.session);
+    } catch (cause) {
+      validationError = cause;
+      try {
+        tx.abort();
+      } catch {
+        // A storage failure may already have aborted the transaction.
+        // Its completion promise still reports the original failure to the UI.
+      }
+    }
+  };
+  try {
+    await done;
+  } catch (cause) {
+    throw validationError ?? cause;
+  }
+  announce();
+  return reviewed!;
+}
 export const saveRoutine = (routine: SavedRoutine) => put("routines", routine);
 export const savePreferences = (preferences: PracticePreferences) =>
   put("settings", { ...preferences, id: "preferences" });
 
 export async function getPreferences(): Promise<PracticePreferences> {
   const settings = await list<PracticePreferences & { id: string }>("settings");
-  return { ...DEFAULT_PREFERENCES, ...settings.find((item) => item.id === "preferences") };
+  const saved = settings.find((item) => item.id === "preferences");
+  const preferences = { ...DEFAULT_PREFERENCES, ...saved };
+  if (saved?.curriculumVersion !== 3) {
+    preferences.earnedLevel = legacyEarnedLevel(
+      (await listObservations()).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    );
+    preferences.curriculumVersion = 3;
+  }
+  return preferences;
 }
 
 export async function deleteRoutine(id: string) {
@@ -138,9 +207,18 @@ export async function deleteRoutine(id: string) {
 
 export async function clearPracticeHistory(): Promise<void> {
   const db = await openDatabase();
-  const tx = db.transaction(["observations", "skills", "sessions"], "readwrite");
+  const tx = db.transaction(["observations", "skills", "sessions", "settings"], "readwrite");
   const done = transactionCompleted(tx);
   for (const name of ["observations", "skills", "sessions"]) tx.objectStore(name).clear();
+  const preferences = tx.objectStore("settings").get("preferences");
+  preferences.onsuccess = () => {
+    if (preferences.result)
+      tx.objectStore("settings").put({
+        ...preferences.result,
+        earnedLevel: 1,
+        curriculumVersion: 3,
+      });
+  };
   await done;
   announce();
 }

@@ -10,7 +10,6 @@ import {
   Flame,
   Headphones,
   LockKeyhole,
-  Minus,
   Play,
   Plus,
   Settings2,
@@ -22,8 +21,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { PracticeNook } from "@/components/practice-nook";
+import { SectionGuide } from "@/components/section-guide";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GUITAR_VOICINGS, getVoicing } from "@/lib/music/catalog";
+import { FOUNDATION_VOICINGS, GUITAR_VOICINGS, getVoicing } from "@/lib/music/catalog";
 import { useReferenceAudio } from "@/lib/music/use-reference-audio";
 import { savePreferences, saveRoutine } from "@/lib/practice-history/indexeddb-repository";
 import { useLearningProfile } from "@/lib/practice-history/use-learning-profile";
@@ -39,6 +39,8 @@ import { createSessionPlan, getSessionCue } from "../domain/session-plan";
 import { usePracticeSession } from "../use-practice-session";
 import { ChordDiagram } from "./chord-diagram";
 import { RoutineEditor } from "./routine-editor";
+import { SessionReview } from "./session-review";
+import { TempoControl } from "./tempo-control";
 
 export function PracticeWorkspace() {
   const profile = useLearningProfile();
@@ -69,8 +71,8 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
     profile.routines.find((s) => s.id === "draft") ?? {
       id: "draft",
       name: "My first routine",
-      voicingIds: ["c-major-open", "g-major-open", "a-minor-open", "e-minor-open"],
-      durations: [4, 4, 4, 4],
+      voicingIds: ["e-minor-open", "g-major-open"],
+      durations: [4, 4],
       bpm: preferences.bpm,
       beatsPerBar: 4,
     },
@@ -79,11 +81,16 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
   const session = usePracticeSession();
   const audio = useReferenceAudio();
   const curriculum = useMemo(
-    () => getCurriculum(profile.observations, preferences.experience),
-    [profile.observations, preferences.experience],
+    () => getCurriculum(profile.observations, preferences.experience, preferences.earnedLevel),
+    [profile.observations, preferences.experience, preferences.earnedLevel],
   );
   const activity = activityStats(profile.sessions);
-  const ids = mode === "adaptive" ? curriculum.voicings.map((v) => v.id) : routine.voicingIds;
+  const ids =
+    mode === "adaptive"
+      ? curriculum.voicings.flatMap((v) =>
+          Array.from({ length: preferences.chordRepeats }, () => v.id),
+        )
+      : routine.voicingIds;
   const durations =
     mode === "adaptive" ? ids.map(() => preferences.beatsPerChord) : routine.durations;
   const preview = createSessionPlan(ids, durations, preferences.totalChanges);
@@ -92,6 +99,8 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
   const countingIn = !!session.active && session.beat < 0;
   const running = !!session.active;
   const busy = running || session.starting;
+  const liveFeedback =
+    (session.active?.session.feedbackMode ?? preferences.feedbackMode) === "live";
   const nextCues = plan.cues.slice(cue.ordinal + 1, cue.ordinal + 4);
   const bpm = session.active?.session.bpm ?? preferences.bpm;
   const beatsPerBar = session.active?.session.beatsPerBar ?? preferences.beatsPerBar;
@@ -124,7 +133,7 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
   const start = (nextBpm = preferences.bpm) => {
     audio.stop();
     setLevelAtStart(curriculum.level);
-    if (preferences.showWelcome) updatePreferences({ showWelcome: false, bpm: nextBpm });
+    updatePreferences({ showWelcome: false, bpm: nextBpm, earnedLevel: curriculum.level });
     void session.start(
       {
         name: mode === "adaptive" ? curriculum.stage.name : routine.name || "Custom routine",
@@ -134,6 +143,7 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
         voicingIds: ids,
         durations,
         totalChanges: preferences.totalChanges,
+        feedbackMode: preferences.feedbackMode,
       },
       preferences.volume,
     );
@@ -180,7 +190,10 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
           </div>
           <div>
             <strong>A good place to start.</strong>
-            <p>Grab your guitar. We’ll start with two chords and build from there.</p>
+            <p>
+              Start with Em → G. Keep your hands on the guitar; tell us how it felt after the
+              session.
+            </p>
             <button
               className="text-button"
               onClick={() => updatePreferences({ showWelcome: false })}
@@ -267,7 +280,7 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                 >
                   {[8, 16, 32, 64].map((n) => (
                     <option value={n} key={n}>
-                      {n} chord changes
+                      {n} chord steps
                     </option>
                   ))}
                 </select>
@@ -297,11 +310,63 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                   <option value="returning">Know a few chords</option>
                 </select>
               </label>
+              <label className="field">
+                <span>Feedback</span>
+                <select
+                  value={preferences.feedbackMode}
+                  onChange={(e) =>
+                    updatePreferences({
+                      feedbackMode: e.target.value as PracticePreferences["feedbackMode"],
+                    })
+                  }
+                >
+                  <option value="after-session">After playing · hands free</option>
+                  <option value="live">While playing · buttons / keyboard</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Repeat each chord</span>
+                <select
+                  value={preferences.chordRepeats}
+                  disabled={mode === "manual"}
+                  onChange={(e) => updatePreferences({ chordRepeats: Number(e.target.value) })}
+                >
+                  <option value="1">Once, then move on</option>
+                  <option value="2">Twice in a row</option>
+                  <option value="4">Four times in a row</option>
+                </select>
+              </label>
               <p>
                 A full bar counts you in. In 6/8, each click is an eighth note. Custom routines use
-                the duration on each step.
+                the duration on each step; use their repeat buttons to play a chord again.
               </p>
             </section>
+          )}
+
+          {!busy && !session.recap && mode === "adaptive" && (
+            <SectionGuide title="Your first practice, step by step">
+              <ol>
+                <li>
+                  Choose a comfortable tempo. BPM means clicks per minute; 60 gives you one click
+                  each second.
+                </li>
+                <li>
+                  Press Start practicing, then use the count-in to put both hands on your guitar.
+                </li>
+                <li>
+                  Strum once per click. Follow the large chord and change when the next step
+                  arrives. A repeated chord means keep the same shape and strum again.
+                </li>
+                <li>
+                  After the session, tell us roughly how many chords sounded clean and arrived on
+                  time. Leave any you are unsure about unscored.
+                </li>
+              </ol>
+              <p>
+                Adaptive chooses what to work on from your reports. Manual lets you write your own
+                sequence. Session settings control the length, repeats and optional live feedback.
+              </p>
+            </SectionGuide>
           )}
 
           {mode === "manual" && !busy && !session.recap && (
@@ -353,11 +418,19 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                   <span>To work on</span>
                 </div>
               </div>
+              {session.recap.feedbackMode === "after-session" && (
+                <SessionReview
+                  key={session.recap.id}
+                  session={session.recap}
+                  saving={session.saving || !!session.saveError}
+                  onReview={session.review}
+                />
+              )}
               <div className="recap-insight">
                 <Sprout size={18} />
                 <p>
                   {session.recap.correct + session.recap.misses < 4
-                    ? "Use the Got it and Missed buttons while you play. A few reports help us choose your next challenge."
+                    ? "A few honest reports help choose your next challenge. Unscored chords still count toward your practice time."
                     : recommendedTempo(
                           session.recap.bpm,
                           session.recap.correct,
@@ -397,7 +470,7 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
               <p className="small-muted" role="status">
                 {session.saving
                   ? "Saving your session…"
-                  : session.error
+                  : session.saveError
                     ? "Your session could not be saved. Keep this page open."
                     : "Session saved on this device. Only your explicit reports affect playing confidence."}
               </p>
@@ -428,8 +501,8 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                   <span className="stage-session-length">
                     <Clock3 size={14} />
                     {running
-                      ? `${Math.max(0, cue.ordinal + (countingIn ? 0 : 1))} / ${session.active!.session.totalChanges} changes`
-                      : `About ${minutes} min · ${preferences.totalChanges} changes`}
+                      ? `${Math.max(0, cue.ordinal + (countingIn ? 0 : 1))} / ${session.active!.session.totalChanges} steps`
+                      : `About ${minutes} min · ${preferences.totalChanges} steps`}
                   </span>
                 </div>
                 <div className="session-progress-track">
@@ -441,7 +514,9 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                       {countingIn
                         ? "GET READY TO PLAY"
                         : running
-                          ? "PLAY THIS CHORD"
+                          ? plan.cues[cue.ordinal - 1]?.voicing.id === cue.voicing.id
+                            ? "PLAY IT AGAIN"
+                            : "PLAY THIS CHORD"
                           : "LET’S START WITH"}
                     </span>
                     <div className="chord-name">{cue.voicing.chordSymbol}</div>
@@ -510,7 +585,13 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                 </div>
                 {running && (
                   <div className="playing-feedback" role="status">
-                    {hasReport ? (
+                    {!liveFeedback ? (
+                      <span>
+                        {countingIn
+                          ? "Relax your shoulders. Find the first shape."
+                          : "Keep both hands on your guitar. We’ll review when you finish."}
+                      </span>
+                    ) : hasReport ? (
                       <>
                         <span
                           className={
@@ -558,43 +639,12 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                         ? "Finish session"
                         : "Start practicing"}
                   </button>
-                  <div className="tempo-control">
-                    <button
-                      className="icon-button"
-                      aria-label="Decrease tempo by five BPM"
-                      disabled={busy || bpm <= 40}
-                      onClick={() => updatePreferences({ bpm: Math.max(40, bpm - 5) })}
-                    >
-                      <Minus size={16} />
-                    </button>
-                    <label className="tempo-readout">
-                      <input
-                        aria-label="Tempo in BPM"
-                        type="number"
-                        min={40}
-                        max={160}
-                        value={bpm}
-                        disabled={busy}
-                        onChange={(e) =>
-                          updatePreferences({
-                            bpm: Math.max(40, Math.min(160, Number(e.target.value) || 40)),
-                          })
-                        }
-                      />
-                      <span>BPM</span>
-                    </label>
-                    <button
-                      className="icon-button"
-                      aria-label="Increase tempo by five BPM"
-                      disabled={busy || bpm >= 160}
-                      onClick={() => updatePreferences({ bpm: Math.min(160, bpm + 5) })}
-                    >
-                      <Plus size={16} />
-                    </button>
-                    <button className="text-button tap-tempo" disabled={busy} onClick={tapTempo}>
-                      Tap tempo
-                    </button>
-                  </div>
+                  <TempoControl
+                    bpm={bpm}
+                    disabled={busy}
+                    onChange={(value) => updatePreferences({ bpm: value })}
+                    onTap={tapTempo}
+                  />
                   <label className="volume-control">
                     <Volume2 size={17} />
                     <input
@@ -607,7 +657,7 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                     />
                   </label>
                 </div>
-                {running && (
+                {running && liveFeedback && (
                   <div className="report-controls">
                     <button
                       className="report-success"
@@ -628,11 +678,15 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                   </div>
                 )}
                 <p className="keyboard-help">
-                  {running ? (
+                  {running && liveFeedback ? (
                     <>
                       <kbd>→</kbd> got it <span>·</span>
                       <kbd>space</kbd> missed <span>·</span>
                       <kbd>esc</kbd> finish
+                    </>
+                  ) : running ? (
+                    <>
+                      Hands free while you play. <kbd>esc</kbd> finishes early.
                     </>
                   ) : (
                     <>
@@ -693,11 +747,11 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
             <div className="section-topline">
               <h2>Your growing chord book</h2>
               <span>
-                {curriculum.unlocked.length} / {GUITAR_VOICINGS.length}
+                {curriculum.unlocked.length} / {FOUNDATION_VOICINGS.length}
               </span>
             </div>
             <div className="chord-palette">
-              {GUITAR_VOICINGS.slice()
+              {FOUNDATION_VOICINGS.slice()
                 .sort((a, b) => (a.level ?? 1) - (b.level ?? 1))
                 .map((v) => {
                   const unlocked = curriculum.unlocked.some((c) => c.id === v.id);
@@ -721,7 +775,10 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
                   );
                 })}
             </div>
-            <p className="small-muted">New chords join your practice as your confidence grows.</p>
+            <p className="small-muted">
+              A gentle path through {FOUNDATION_VOICINGS.length} essentials. All{" "}
+              {GUITAR_VOICINGS.length} chords are available to explore in the chord book and Manual.
+            </p>
             <Link className="text-button" href="/chords">
               Explore chord shapes <ArrowRight size={14} />
             </Link>
@@ -780,14 +837,18 @@ function PracticeSurface({ profile }: { profile: ReturnType<typeof useLearningPr
             <ol>
               <li>Find the chord shape and strum once per click.</li>
               <li>Change chords when the next shape arrives.</li>
-              <li>Tap Got it or Missed to tell us how it felt. Unreported chords stay unscored.</li>
+              <li>
+                Keep playing with both hands. Review your chords after the session; anything you
+                skip stays unscored.
+              </li>
               <li>
                 Build 80% clean reports over at least 8 attempts per chord to reach the next level.
               </li>
             </ol>
             <p>
-              Playing confidence comes from your reports. The chord trainer checks the frets you
-              select.
+              Playing confidence comes from your reports, not microphone grading. Live Got it /
+              Missed buttons are optional in Session settings. The shape trainer checks the frets
+              you select.
             </p>
             <div className="learning-path">
               {LEVELS.map((level, i) => (

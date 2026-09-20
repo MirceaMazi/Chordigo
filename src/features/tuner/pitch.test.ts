@@ -25,6 +25,20 @@ describe("single string tuning", () => {
     const result = detectPitch(wave(110, 48000, true), 48000);
     expect(result!.frequency).toBeCloseTo(110, 0);
   });
+  it("detects quiet sustained guitar strings without accepting low-level noise", () => {
+    for (const string of TUNING_STRINGS) {
+      const samples = wave(string.frequency, 48000).map((v) => v * 0.01);
+      const result = detectPitch(samples, 48000);
+      expect(result).not.toBeNull();
+      expect(Math.abs(centsFrom(result!.frequency, string.frequency))).toBeLessThan(2);
+    }
+    expect(
+      detectPitch(
+        wave(110, 48000).map((v) => v * 0.0001),
+        48000,
+      ),
+    ).toBeNull();
+  });
   it("does not claim a pitch for silence, noise or invalid samples", () => {
     expect(detectPitch(new Float32Array(4096), 48000)).toBeNull();
     expect(detectPitch(new Float32Array(4096).fill(NaN), 48000)).toBeNull();

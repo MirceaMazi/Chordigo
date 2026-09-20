@@ -3,16 +3,16 @@ import { readFile } from "node:fs/promises";
 
 test("explores the complete library and filters chords", async ({ page }) => {
   await page.goto("/chords");
-  await expect(page.locator(".chord-card")).toHaveCount(13);
+  await expect(page.locator(".chord-card")).toHaveCount(79);
   await page.getByRole("button", { name: "Minor", exact: true }).click();
-  await expect(page.locator(".chord-card")).toHaveCount(4);
+  await expect(page.locator(".chord-card")).toHaveCount(12);
   await page.getByLabel("Search chords").fill("xyz");
   await expect(page.getByRole("heading", { name: "No chords found" })).toBeVisible();
   await page.getByRole("button", { name: "Show all chords" }).click();
   await page.getByRole("button", { name: "Explore D major", exact: true }).click();
   await expect(page.locator(".chord-detail h2")).toHaveText("D major");
   await page.getByRole("button", { name: "Test this shape" }).click();
-  await expect(page.getByLabel("Target chord")).toHaveValue("d-major-open");
+  await expect(page.getByLabel("Chord to build")).toHaveValue("d-major-open");
 });
 
 test("scores a shape once, keeps playing scores separate, and restores backups idempotently", async ({
@@ -62,7 +62,7 @@ test("records revealed shapes as review and handles incorrect fingerings", async
   await selectCMajorShape(page);
   await page.getByRole("button", { name: "Check chord" }).click();
   await expect(page.getByText("Shape matched. A helpful review.")).toBeVisible();
-  await page.getByLabel("Target chord").selectOption("f-major-compact");
+  await page.getByLabel("Chord to build").selectOption("f-major-compact");
   await selectCMajorShape(page);
   await page.getByRole("button", { name: "Check chord" }).click();
   await expect(page.getByText("Not yet. Take a look at the highlighted strings.")).toBeVisible();
@@ -86,9 +86,46 @@ test("finishes an eight-shape round and has no accidental keyboard submission", 
 });
 
 async function selectCMajorShape(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "Mute Low E string", exact: true }).click();
   await page.getByRole("button", { name: "Set A string fret 3", exact: true }).click();
   await page.getByRole("button", { name: "Set D string fret 2", exact: true }).click();
-  await page.getByRole("button", { name: "Set G string open", exact: true }).click();
   await page.getByRole("button", { name: "Set B string fret 1", exact: true }).click();
-  await page.getByRole("button", { name: "Set High E string open", exact: true }).click();
 }
+
+test("starts with open horizontal strings and supports shapes higher on the neck", async ({
+  page,
+}) => {
+  await page.goto("/chords");
+  await page.getByLabel("Search chords").fill("Gb");
+  await expect(page.getByRole("button", { name: "Explore F# major", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Shape trainer", exact: true }).click();
+  await expect(page.getByText("6 strings sounding", { exact: true })).toBeVisible();
+  const lowE = page.getByRole("button", { name: "Set Low E string fret 1", exact: true });
+  const highE = page.getByRole("button", { name: "Set High E string fret 1", exact: true });
+  const highE2 = page.getByRole("button", { name: "Set High E string fret 2", exact: true });
+  const [low, high, next] = await Promise.all([
+    lowE.boundingBox(),
+    highE.boundingBox(),
+    highE2.boundingBox(),
+  ]);
+  expect(low!.y).toBeGreaterThan(high!.y);
+  expect(next!.y).toBe(high!.y);
+  expect(next!.x).toBeGreaterThan(high!.x);
+  await highE.click();
+  await page.getByRole("button", { name: "Clear High E string fret 1", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Mute High E string", exact: true })).toBeVisible();
+  await page.getByLabel("Chord to build").selectOption("eb-major-movable");
+  await page.getByRole("button", { name: "Mute Low E string", exact: true }).click();
+  for (const [string, fret] of [
+    ["A", 6],
+    ["D", 8],
+    ["G", 8],
+    ["B", 8],
+    ["High E", 6],
+  ] as const)
+    await page
+      .getByRole("button", { name: `Set ${string} string fret ${fret}`, exact: true })
+      .click();
+  await page.getByRole("button", { name: "Check chord" }).click();
+  await expect(page.getByText("Correct. That shape is yours.", { exact: true })).toBeVisible();
+});

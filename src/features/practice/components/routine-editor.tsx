@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Copy, Plus, Save, Trash2 } from "lucide-react";
+import { SectionGuide } from "@/components/section-guide";
 import { GUITAR_VOICINGS, PROGRESSION_TEMPLATES, getVoicing } from "@/lib/music/catalog";
 import { resolveProgression } from "@/lib/music/progressions";
 import { deleteRoutine, saveRoutine } from "@/lib/practice-history/indexeddb-repository";
@@ -91,6 +92,34 @@ export function RoutineEditor({
           </select>
         </label>
       </div>
+      <p className="routine-explainer">
+        Write the order you want to play. The sequence loops until the session ends, including any
+        repeated chords.
+      </p>
+      <SectionGuide title="How to make your own routine" open>
+        <ol>
+          <li>
+            Use the Em → G starter, or load a progression to replace the sequence with a ready-made
+            starting point.
+          </li>
+          <li>
+            Choose a chord and press Add chord. Use the arrows to reorder it, the copy button to
+            repeat it, or the bin to remove it.
+          </li>
+          <li>
+            Beats is the time you spend on that step. Em for 4 beats, then Em again for 4 beats,
+            gives you two turns without changing shape.
+          </li>
+          <li>
+            Set your tempo below and the session length in Session settings. Press Start practicing
+            when you are ready.
+          </li>
+        </ol>
+        <p>
+          Your edits save as a draft. Give it a name and press Save routine to keep a reusable
+          version in Load a progression.
+        </p>
+      </SectionGuide>
       <ol className="sequence-steps">
         {routine.voicingIds.map((id, i) => (
           <li key={`${i}-${id}`}>
@@ -118,6 +147,29 @@ export function RoutineEditor({
               </select>
             </label>
             <div className="sequence-actions">
+              <button
+                className="icon-button"
+                disabled={routine.voicingIds.length >= 16}
+                aria-label={`Repeat ${getVoicing(id).chordSymbol} after step ${i + 1}`}
+                title="Repeat this chord"
+                onClick={() =>
+                  change({
+                    ...routine,
+                    voicingIds: [
+                      ...routine.voicingIds.slice(0, i + 1),
+                      id,
+                      ...routine.voicingIds.slice(i + 1),
+                    ],
+                    durations: [
+                      ...routine.durations.slice(0, i + 1),
+                      routine.durations[i],
+                      ...routine.durations.slice(i + 1),
+                    ],
+                  })
+                }
+              >
+                <Copy size={14} />
+              </button>
               <button
                 className="icon-button"
                 disabled={i === 0}

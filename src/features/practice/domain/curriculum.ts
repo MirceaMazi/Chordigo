@@ -1,4 +1,4 @@
-import { GUITAR_VOICINGS, getVoicing, PROGRESSION_TEMPLATES } from "@/lib/music/catalog";
+import { FOUNDATION_VOICINGS, getVoicing, PROGRESSION_TEMPLATES } from "@/lib/music/catalog";
 import { resolveProgression } from "@/lib/music/progressions";
 import type { PracticeObservation, PracticeSession } from "@/lib/practice-history/types";
 
@@ -6,12 +6,12 @@ export const LEVELS = [
   {
     name: "First strings",
     description: "Find your rhythm with two friendly shapes.",
-    symbols: ["Em", "Am"],
+    symbols: ["Em", "G"],
   },
   {
     name: "Open possibilities",
     description: "Add the chords behind countless songs.",
-    symbols: ["C", "G", "D"],
+    symbols: ["Am", "C", "D"],
   },
   {
     name: "A little more color",
@@ -60,14 +60,15 @@ export function chordEvidence(
 export function getCurriculum(
   observations: readonly PracticeObservation[],
   experience: "beginner" | "returning" = "beginner",
+  earnedLevel = 1,
 ) {
-  let level = experience === "returning" ? 2 : 1;
+  let level = Math.max(experience === "returning" ? 2 : 1, Math.min(LEVELS.length, earnedLevel));
   while (level < LEVELS.length) {
-    const current = GUITAR_VOICINGS.filter((v) => (v.level ?? 1) <= level);
+    const current = FOUNDATION_VOICINGS.filter((v) => (v.level ?? 1) <= level);
     if (!current.every((v) => hasReachedSteady(v.id, observations))) break;
     level += 1;
   }
-  const unlocked = GUITAR_VOICINGS.filter((v) => (v.level ?? 1) <= level);
+  const unlocked = FOUNDATION_VOICINGS.filter((v) => (v.level ?? 1) <= level);
   const ordered = [...unlocked].sort((a, b) => {
     const aEvidence = chordEvidence(a.id, observations, "progression");
     const bEvidence = chordEvidence(b.id, observations, "progression");
@@ -128,6 +129,20 @@ export function getCurriculum(
   };
 }
 
+// Preserve stages earned with the original Em/Am introduction when loading old settings.
+export function legacyEarnedLevel(observations: readonly PracticeObservation[]) {
+  let level = 1;
+  while (level < LEVELS.length) {
+    const current = FOUNDATION_VOICINGS.filter((v) => {
+      const oldLevel = v.chordSymbol === "Am" ? 1 : v.chordSymbol === "G" ? 2 : (v.level ?? 1);
+      return oldLevel <= level;
+    });
+    if (!current.every((v) => hasReachedSteady(v.id, observations))) break;
+    level++;
+  }
+  return level;
+}
+
 function hasReachedSteady(id: string, observations: readonly PracticeObservation[]): boolean {
   const attempts = observations.filter(
     (o) =>
@@ -142,6 +157,11 @@ function hasReachedSteady(id: string, observations: readonly PracticeObservation
     if (attempts[i].result === "correct") correct++;
     if (i >= 20 && attempts[i - 20].result === "correct") correct--;
     const count = Math.min(i + 1, 20);
+    if (
+      attempts[i].source === "session-review" &&
+      attempts[i + 1]?.sessionId === attempts[i].sessionId
+    )
+      continue;
     if (count >= 8 && correct / count >= 0.8) return true;
   }
   return false;

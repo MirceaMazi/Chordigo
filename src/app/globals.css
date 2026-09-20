@@ -2231,6 +2231,44 @@ summary::-webkit-details-marker {
   color: var(--forest);
   margin: 26px 0 20px;
 }
+.tuner-input {
+  max-width: 430px;
+  margin: 24px auto 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  text-align: left;
+}
+.tuner-input-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--ink);
+}
+.tuner-input-meter {
+  height: 9px;
+  margin-top: 9px;
+  overflow: hidden;
+  border: 1px solid var(--ink-muted);
+  border-radius: 3px;
+  background: var(--surface);
+}
+.tuner-input-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--green);
+}
+.tuner-input-device,
+.tuner-input-help {
+  margin-top: 9px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
 .tuner-strings {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -3425,6 +3463,258 @@ summary::-webkit-details-marker {
   }
   .session-is-running .volume-control {
     display: none;
+  }
+}
+.section-guide {
+  margin: 16px 0;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  color: var(--ink);
+  font-size: 12px;
+  text-align: left;
+}
+.section-guide summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 0;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.section-guide summary::-webkit-details-marker {
+  display: none;
+}
+.section-guide summary svg {
+  flex-shrink: 0;
+}
+.section-guide summary svg:last-child {
+  margin-left: auto;
+  transition: transform 150ms;
+}
+.section-guide[open] summary svg:last-child {
+  transform: rotate(180deg);
+}
+.section-guide-content {
+  padding-bottom: 14px;
+  line-height: 1.75;
+}
+.section-guide-content ol {
+  margin: 0;
+  padding-left: 20px;
+  list-style: decimal;
+}
+.section-guide-content li + li {
+  margin-top: 7px;
+}
+.section-guide-content p {
+  margin: 10px 0 0;
+  font-size: inherit;
+  color: inherit;
+}
+.section-guide-content p:first-child {
+  margin-top: 0;
+}
+.routine-explainer {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin: 15px 0;
+}
+.session-review {
+  border-block: 1px solid var(--line);
+  padding: 22px 0;
+  margin: 20px 0;
+  text-align: left;
+}
+.session-review h3 {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+.session-review > p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+.review-chords {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+}
+.review-chord {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+.review-chord > div {
+  min-width: 90px;
+  display: grid;
+  gap: 2px;
+}
+.review-chord > div strong {
+  font-size: 22px;
+  color: var(--forest);
+}
+.review-chord > div span {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.review-chord .field {
+  flex: 1;
+  min-width: 0;
+}
+.review-chord .field select {
+  width: 100%;
+}
+.review-saved {
+  color: var(--forest);
+  font-size: 13px;
+}
+.horizontal-fretboard {
+  margin: 22px auto 0;
+  max-width: 660px;
+}
+.horizontal-fretboard-heading,
+.horizontal-string-row {
+  display: grid;
+  grid-template-columns: 34px 40px repeat(5, minmax(0, 1fr)) 35px;
+  align-items: center;
+  text-align: center;
+}
+.horizontal-fretboard-heading {
+  color: var(--ink-muted);
+  font: 10px var(--font-mono);
+  padding-bottom: 10px;
+}
+.horizontal-string-label {
+  display: grid;
+  font: 13px var(--font-mono);
+  color: var(--ink);
+}
+.horizontal-string-label small {
+  font-size: 9px;
+  color: var(--ink-muted);
+}
+.horizontal-string-row .string-state-button {
+  min-height: 36px;
+  width: 34px;
+}
+.horizontal-string-row .string-state-button.is-muted {
+  color: var(--ink-muted);
+  background: var(--surface-subtle);
+  border-color: var(--line);
+}
+.horizontal-fret-cell {
+  position: relative;
+  height: 46px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-right: 2px solid #bcaa8e;
+  border-radius: 0;
+  background: #f5ead8;
+}
+.horizontal-fret-cell:hover:not(:disabled) {
+  background: #ede0c9;
+}
+.horizontal-fret-cell.is-first-fret {
+  border-left: 4px solid #97866a;
+}
+.horizontal-string-line {
+  position: absolute;
+  height: 1px;
+  top: 50%;
+  left: 0;
+  right: -2px;
+  background: #8b7a5e;
+}
+.string-0 .horizontal-string-line {
+  height: 3px;
+}
+.string-1 .horizontal-string-line {
+  height: 2.5px;
+}
+.string-2 .horizontal-string-line {
+  height: 2px;
+}
+.string-3 .horizontal-string-line {
+  height: 1.5px;
+}
+.horizontal-string-row output {
+  color: var(--forest);
+  font: 11px var(--font-mono);
+}
+.horizontal-string-row.is-incorrect .horizontal-fret-cell {
+  background: var(--coral-soft);
+}
+.horizontal-string-row.is-incorrect .selected-fret-dot {
+  background: var(--coral);
+  box-shadow: 0 0 0 1px var(--coral);
+}
+.fretboard-orientation {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+  margin: 14px 0 0;
+  text-align: center;
+}
+.tuner-device-select {
+  margin-top: 12px;
+  text-align: left;
+}
+.tuner-device-select select {
+  width: 100%;
+  min-width: 0;
+}
+.tempo-control {
+  flex-wrap: wrap;
+}
+.tempo-control .tap-tempo {
+  display: inline-flex;
+}
+.library-filters {
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .section-guide {
+    padding-inline: 12px;
+  }
+  .review-chord {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .review-chord > div {
+    min-width: 65px;
+  }
+  .review-chord .text-button {
+    margin-left: auto;
+  }
+  .transport-top .tempo-control {
+    width: 100%;
+    justify-content: center;
+  }
+  .transport-top .tempo-control .icon-button {
+    width: 36px;
+    min-height: 36px;
+  }
+  .horizontal-fretboard-heading,
+  .horizontal-string-row {
+    grid-template-columns: 23px 35px repeat(5, minmax(0, 1fr)) 28px;
+  }
+  .horizontal-fretboard-heading {
+    font-size: 8px;
+  }
+  .horizontal-fretboard .selected-fret-dot {
+    width: 24px;
+    height: 24px;
+    font-size: 8px;
+  }
+  .horizontal-string-row output {
+    font-size: 9px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

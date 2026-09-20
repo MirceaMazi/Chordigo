@@ -12,12 +12,14 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
+import { SectionGuide } from "@/components/section-guide";
 import { useRef, useState } from "react";
 import { GUITAR_VOICINGS, getVoicing } from "@/lib/music/catalog";
 import {
   clearPracticeHistory,
   exportPracticeData,
   importPracticeData,
+  reviewPracticeSession,
 } from "@/lib/practice-history/indexeddb-repository";
 import { useLearningProfile } from "@/lib/practice-history/use-learning-profile";
 import {
@@ -29,6 +31,7 @@ import {
   localDay,
 } from "@/features/practice/domain/curriculum";
 import { formatTime } from "@/features/practice/components/practice-workspace";
+import { SessionReview } from "@/features/practice/components/session-review";
 
 export function ProgressDashboard() {
   const profile = useLearningProfile();
@@ -53,7 +56,11 @@ export function ProgressDashboard() {
     }
   };
   const activity = activityStats(profile.sessions);
-  const curriculum = getCurriculum(profile.observations, profile.preferences.experience);
+  const curriculum = getCurriculum(
+    profile.observations,
+    profile.preferences.experience,
+    profile.preferences.earnedLevel,
+  );
   const transitions = getTransitions(profile.observations);
   const playing = profile.observations.filter(
     (o) => o.context === "progression" && o.result !== "uncertain",
@@ -191,11 +198,28 @@ export function ProgressDashboard() {
               </span>
               <strong>
                 {steady}
-                <small> / 13</small>
+                <small> chords</small>
               </strong>
               <small>Chords with steady playing confidence</small>
             </div>
           </section>
+          <SectionGuide title="What does my progress mean?">
+            <p>
+              Playing confidence comes from your review after a session, or optional live feedback.
+              Clean means the chord sounded clear and arrived on time. Unscored playing still counts
+              toward your time, streak and daily goal.
+            </p>
+            <p>
+              Shapes tracks your unassisted answers in the shape trainer. A hint or alternate
+              fingering stays unscored. Reach at least 8 playing reports with 80% clean for each
+              chapter’s chords to unlock the next chapter.
+            </p>
+            <p>
+              The table starts with the foundation chords and includes any extra chords you
+              practise. Your journal holds session details. Open “Your progress belongs to you”
+              below to download or restore a backup.
+            </p>
+          </SectionGuide>
           <div className="progress-layout">
             <div>
               <section className="activity-panel panel">
@@ -268,7 +292,11 @@ export function ProgressDashboard() {
                 </div>
                 <div className="skill-list">
                   {[...GUITAR_VOICINGS]
-                    .sort((a, b) => (a.level ?? 1) - (b.level ?? 1))
+                    .filter(
+                      (v) =>
+                        v.level || profile.observations.some((o) => o.expectedVoicingId === v.id),
+                    )
+                    .sort((a, b) => (a.level ?? 99) - (b.level ?? 99))
                     .map((v) => {
                       const e = chordEvidence(v.id, profile.observations, context);
                       const label =
@@ -363,8 +391,9 @@ export function ProgressDashboard() {
                   ))
                 ) : (
                   <p>
-                    Report a chord change during practice to see which movements feel natural and
-                    which need another turn.
+                    Optional live feedback can track individual chord changes here. Your review
+                    after playing tracks each chord’s confidence; it doesn’t guess which transition
+                    you missed.
                   </p>
                 )}
               </section>
@@ -423,6 +452,25 @@ export function ProgressDashboard() {
                       Only reported changes are scored. Unreported playing counts toward your
                       practice time.
                     </p>
+                    {s.feedbackMode === "after-session" && s.status !== "active" && (
+                      <SessionReview
+                        session={s}
+                        saving={busy}
+                        onReview={async (answers) => {
+                          setBusy(true);
+                          try {
+                            await reviewPracticeSession(s.id, answers);
+                            setError(null);
+                          } catch {
+                            setError(
+                              "Your review could not be saved. Try again; your answers are still here.",
+                            );
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      />
+                    )}
                   </div>
                 </details>
               ))

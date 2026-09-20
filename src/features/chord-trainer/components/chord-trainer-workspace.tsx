@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { SectionGuide } from "@/components/section-guide";
 import { ChordDiagram } from "@/features/practice/components/chord-diagram";
 import { chordEvidence, getCurriculum } from "@/features/practice/domain/curriculum";
 import { GUITAR_VOICINGS, getVoicing } from "@/lib/music/catalog";
@@ -68,7 +69,11 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
   const sessionId = useRef<string | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
   const audio = useReferenceAudio();
-  const curriculum = getCurriculum(profile.observations, profile.preferences.experience);
+  const curriculum = getCurriculum(
+    profile.observations,
+    profile.preferences.experience,
+    profile.preferences.earnedLevel,
+  );
   const selected = getVoicing(selectedId);
   const playedStrings = useMemo(() => getPlayedStrings(selectedFrets), [selectedFrets]);
   const preview = useMemo(
@@ -80,9 +85,12 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
     (v) =>
       (filter === "all" ||
         (filter === "learning" && curriculum.unlocked.some((c) => c.id === v.id)) ||
+        (filter === "sevenths" && v.quality.includes("seventh")) ||
         v.quality === filter) &&
-      `${v.displayName} ${v.chordSymbol}`.toLowerCase().includes(search.toLowerCase().trim()),
-  ).sort((a, b) => (a.level ?? 1) - (b.level ?? 1));
+      `${v.displayName} ${v.chordSymbol} ${v.aliases?.join(" ") ?? ""}`
+        .toLowerCase()
+        .includes(search.toLowerCase().trim().replaceAll("♯", "#").replaceAll("♭", "b")),
+  ).sort((a, b) => (a.level ?? 99) - (b.level ?? 99));
   const clear = () => {
     setSelectedFrets(EMPTY_GUITAR_SHAPE);
     setSubmitted(null);
@@ -206,13 +214,32 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
       </div>
       {mode === "library" ? (
         <>
+          <SectionGuide title="Find a chord and learn its shape">
+            <p>
+              Choose a card to see its fingering, playing tip and reference sound. Search by name or
+              symbol, including sharps and flats (F# or Gb). Filters help you explore a chord
+              family; Learning now shows your current practice chords.
+            </p>
+            <p>
+              The book includes major, minor, seventh, major seventh, minor seventh and power chords
+              in every key, plus common suspended and add9 shapes. All are available from day one;
+              the beginner path introduces a smaller set gradually.
+            </p>
+            <p>
+              Hear chord plays a reference. Test this shape starts a memory exercise on screen. To
+              practise with your guitar and a metronome, open Practice.
+            </p>
+          </SectionGuide>
           <div className="library-filters">
             {[
               { id: "all", label: "All chords" },
               { id: "learning", label: "Learning now" },
               { id: "major", label: "Major" },
               { id: "minor", label: "Minor" },
-              { id: "seventh", label: "Sevenths" },
+              { id: "sevenths", label: "Sevenths" },
+              { id: "suspended", label: "Suspended" },
+              { id: "added", label: "Add9" },
+              { id: "power", label: "Power" },
             ].map((item) => (
               <button
                 className={`filter-chip ${filter === item.id ? "is-selected" : ""}`}
@@ -300,7 +327,9 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
                   </div>
                   <div>
                     <span>Introduced in</span>
-                    <strong>Level {selected.level}</strong>
+                    <strong>
+                      {selected.level ? `Level ${selected.level}` : "Extra vocabulary"}
+                    </strong>
                   </div>
                 </div>
                 <button
@@ -329,6 +358,9 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
                   <b>1–4</b> Index, middle, ring, pinky.
                 </p>
                 <p>Thickest string on the left. Frets run from the top down.</p>
+                <p>
+                  A number beside the neck marks the starting fret for shapes higher up the neck.
+                </p>
               </div>
             </aside>
           </div>
@@ -368,13 +400,39 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
           <div className="quiz-intro">
             <Lightbulb size={19} />
             <p>
-              Build the shape from memory by tapping the frets. Use the circles above the neck to
-              mute or open a string. Need a hand? Reveal the shape for an unscored review.
+              Build {selected.chordSymbol} from memory. All strings start open; tap a fret to press
+              it down and × to mute a string. This is an on-screen memory exercise, so you can put
+              your guitar down.
             </p>
           </div>
+          <SectionGuide title="How the shape trainer works">
+            <ol>
+              <li>
+                Chord to build is the question: recreate that chord’s fingering on the horizontal
+                neck. Choosing another chord starts a new eight-shape round with it first.
+              </li>
+              <li>
+                The thin high E string is at the top. Tap a fret to select it; tap the same fret
+                again to release that string to open.
+              </li>
+              <li>
+                Use the circle at the left to mute a string (×). Tap × to open it again (○). Reset
+                returns all six strings to open.
+              </li>
+              <li>
+                Check chord compares your answer with the shape in the chord book. Reveal shape
+                shows the answer and makes this attempt an unscored review.
+              </li>
+            </ol>
+            <p>
+              The chord name under the neck describes your current selection. It may differ from the
+              chord you are trying to build. Shape recall is separate from how you play on your
+              guitar.
+            </p>
+          </SectionGuide>
           <div className="trainer-heading">
             <label className="field">
-              <span>Target chord</span>
+              <span>Chord to build</span>
               <select
                 value={selectedId}
                 disabled={saving}
@@ -398,7 +456,7 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
           </div>
           <section className="trainer-workbench" aria-label="Build a chord">
             <div className="trainer-target">
-              <span>YOUR TARGET</span>
+              <span>BUILD FROM MEMORY</span>
               <h2>{selected.chordSymbol}</h2>
               <p>{selected.displayName}</p>
               <button
@@ -436,7 +494,7 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
                 </div>
                 <button
                   className="icon-button"
-                  aria-label="Clear selected frets"
+                  aria-label="Reset strings to open"
                   disabled={saving || attempted}
                   onClick={clear}
                 >
@@ -446,6 +504,11 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
               <fieldset disabled={saving || attempted} className="fretboard-fieldset">
                 <InteractiveFretboard
                   selectedFrets={selectedFrets}
+                  firstFret={
+                    Math.max(...selected.frets.map((f) => f ?? 0)) > 5
+                      ? Math.min(...selected.frets.filter((f): f is number => f !== null && f > 0))
+                      : 1
+                  }
                   playedStrings={playedStrings}
                   incorrectStringIndexes={result?.incorrectStringIndexes ?? []}
                   onSelectFret={(index, fret) => {
@@ -455,7 +518,7 @@ function ChordBook({ profile }: { profile: ReturnType<typeof useLearningProfile>
                 />
               </fieldset>
               <div className="detection-strip" aria-live="polite">
-                <span>YOUR SELECTED NOTES</span>
+                <span>YOUR FINGERING SOUNDS LIKE</span>
                 <strong>
                   {preview.detectedChords.length
                     ? preview.detectedChords

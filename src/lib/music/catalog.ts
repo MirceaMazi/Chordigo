@@ -1,6 +1,7 @@
 import type { GuitarVoicing, ProgressionTemplate } from "./types";
+import { ADDITIONAL_VOICINGS } from "./additional-voicings";
 
-export const GUITAR_VOICINGS: readonly GuitarVoicing[] = [
+export const FOUNDATION_VOICINGS: readonly GuitarVoicing[] = [
   {
     id: "c-major-open",
     chordSymbol: "C",
@@ -20,7 +21,7 @@ export const GUITAR_VOICINGS: readonly GuitarVoicing[] = [
     positionLabel: "Open",
     frets: [3, 2, 0, 0, 0, 3],
     fingers: [2, 1, null, null, null, 3],
-    level: 2,
+    level: 1,
     tip: "Let your thumb rest behind the neck. Leave room for all three middle strings to ring open.",
   },
   {
@@ -31,7 +32,7 @@ export const GUITAR_VOICINGS: readonly GuitarVoicing[] = [
     positionLabel: "Open",
     frets: [null, 0, 2, 2, 1, 0],
     fingers: [null, null, 2, 3, 1, null],
-    level: 1,
+    level: 2,
     tip: "Place your index finger close to the first fret on the B string. Strum the five thinnest strings.",
   },
   {
@@ -146,6 +147,13 @@ export const GUITAR_VOICINGS: readonly GuitarVoicing[] = [
   },
 ];
 
+export const GUITAR_VOICINGS: readonly GuitarVoicing[] = [
+  ...FOUNDATION_VOICINGS,
+  ...ADDITIONAL_VOICINGS.filter(
+    (extra) => !FOUNDATION_VOICINGS.some((v) => v.chordSymbol === extra.chordSymbol),
+  ),
+];
+
 export const PROGRESSION_TEMPLATES: readonly ProgressionTemplate[] = [
   {
     id: "open-cycle",
@@ -159,7 +167,24 @@ export const PROGRESSION_TEMPLATES: readonly ProgressionTemplate[] = [
     tonic: "C",
     romanNumerals: ["I", "V", "vi", "IV"],
   },
-  { id: "first-changes", name: "First two chords", tonic: "C", romanNumerals: ["iii", "vi"] },
+  {
+    id: "first-changes",
+    name: "First two chords · Em → G",
+    tonic: "G",
+    romanNumerals: ["vi", "I"],
+  },
+  {
+    id: "gentle-repeats",
+    name: "Settle into each shape · Em Em G G",
+    tonic: "G",
+    romanNumerals: ["vi", "vi", "I", "I"],
+  },
+  {
+    id: "minor-first-changes",
+    name: "A gentle minor change · Em → Am",
+    tonic: "C",
+    romanNumerals: ["iii", "vi"],
+  },
   {
     id: "acoustic-daylight",
     name: "Acoustic daylight",
@@ -197,7 +222,9 @@ export function getVoicing(id: string): GuitarVoicing {
 }
 
 export function getVoicingBySymbol(symbol: string): GuitarVoicing {
-  const voicing = GUITAR_VOICINGS.find((candidate) => candidate.chordSymbol === symbol);
+  const voicing = GUITAR_VOICINGS.find(
+    (candidate) => candidate.chordSymbol === symbol || candidate.aliases?.includes(symbol),
+  );
 
   if (!voicing) {
     throw new Error(`No guitar voicing is registered for ${symbol}.`);

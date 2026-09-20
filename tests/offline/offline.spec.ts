@@ -30,19 +30,24 @@ test("loads every room and saves a complete practice with the network disconnect
   await expect(page.getByText("Session saved on this device.", { exact: false })).toBeVisible({
     timeout: 15_000,
   });
+  await page.getByRole("button", { name: "All Em chords felt clean" }).click();
+  await page.getByRole("button", { name: "Save my review" }).click();
+  await expect(page.getByText("Your review is saved.", { exact: false })).toBeVisible();
   await page.getByRole("link", { name: "View progress" }).click();
   await expect(page.locator(".history-item")).toHaveCount(1);
+  await expect(page.locator(".stats-grid")).toContainText("From 4 explicit playing reports");
   await page.reload();
   await expect(page.locator(".history-item")).toHaveCount(1);
   await page.getByRole("navigation").getByRole("link", { name: "Chords" }).click();
-  await expect(page.locator(".chord-card")).toHaveCount(13);
+  await expect(page.locator(".chord-card")).toHaveCount(79);
   await page.goto("/chords?chord=d-major-open");
   await expect(page.locator(".chord-detail h2")).toHaveText("D major");
   await page.getByRole("button", { name: "Test this shape" }).click();
   await expect(page.getByRole("button", { name: "Check chord" })).toBeVisible();
   await page.getByRole("navigation").getByRole("link", { name: "Tuner" }).click();
   await expect(page.getByRole("button", { name: "Enable microphone" })).toBeVisible();
-  await page.getByRole("button", { name: "Play A reference tone", exact: true }).click();
+  await page.getByRole("button", { name: "Tune A string", exact: true }).click();
+  await page.getByRole("button", { name: "Hear A reference tone", exact: true }).click();
   await expect(page.locator(".tuner-frequency")).toContainText("110.0");
   await context.setOffline(false);
   await page.getByRole("navigation").getByRole("link", { name: "Progress" }).click();

@@ -64,7 +64,7 @@ export function parsePracticeBackup(json: string): PracticeBackup {
       !ids.has(o.expectedVoicingId) ||
       !timestamp(o.createdAt) ||
       !["progression", "chord-trainer"].includes(String(o.context)) ||
-      !["keyboard", "fret-selection", "microphone"].includes(String(o.source)) ||
+      !["keyboard", "fret-selection", "microphone", "session-review"].includes(String(o.source)) ||
       !["correct", "incorrect", "reported-miss", "uncertain"].includes(String(o.result)) ||
       !Array.isArray(o.observedChordSymbols) ||
       o.observedChordSymbols.length > 20 ||
@@ -103,7 +103,10 @@ export function parsePracticeBackup(json: string): PracticeBackup {
       !integer(s.correct, 0, s.totalChanges) ||
       !integer(s.misses, 0, s.totalChanges) ||
       s.correct + s.misses > s.totalChanges ||
-      s.algorithmVersion !== 2
+      s.algorithmVersion !== 2 ||
+      (s.feedbackMode !== undefined &&
+        !["after-session", "live"].includes(String(s.feedbackMode))) ||
+      (s.reviewedAt !== undefined && !timestamp(s.reviewedAt))
     )
       throw new Error("This backup contains an invalid session. No data has been imported.");
   }
@@ -131,7 +134,12 @@ export function parsePracticeBackup(json: string): PracticeBackup {
       !integer(p.volume, 0, 100) ||
       !["beginner", "returning"].includes(String(p.experience)) ||
       ![5, 10, 15].includes(Number(p.dailyGoal)) ||
-      typeof p.showWelcome !== "boolean"
+      typeof p.showWelcome !== "boolean" ||
+      (p.feedbackMode !== undefined &&
+        !["after-session", "live"].includes(String(p.feedbackMode))) ||
+      (p.chordRepeats !== undefined && ![1, 2, 4].includes(Number(p.chordRepeats))) ||
+      (p.curriculumVersion !== undefined && p.curriculumVersion !== 3) ||
+      (p.earnedLevel !== undefined && !integer(p.earnedLevel, 1, 5))
     )
       throw new Error("This backup contains invalid preferences. No data has been imported.");
   }

@@ -19,7 +19,9 @@ export function detectPitch(
     if (!Number.isFinite(value)) return null;
     sum += value * value;
   }
-  if (Math.sqrt(sum / samples.length) < 0.006) return null;
+  // A quiet plucked string can fall below a speech-oriented input gate.
+  // Periodicity confidence still rejects unpitched noise above this floor.
+  if (Math.sqrt(sum / samples.length) < 0.0015) return null;
   const size = Math.floor(samples.length / 2);
   const minLag = Math.max(2, Math.floor(sampleRate / 1100));
   const maxLag = Math.min(size - 1, Math.ceil(sampleRate / 65));

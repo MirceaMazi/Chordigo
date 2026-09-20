@@ -3,7 +3,7 @@ import type { GuitarStringFret, GuitarVoicing } from "@/lib/music/types";
 
 export const GUITAR_STRING_LABELS = ["Low E", "A", "D", "G", "B", "High E"] as const;
 export const STANDARD_TUNING = ["E2", "A2", "D3", "G3", "B3", "E4"] as const;
-export const EMPTY_GUITAR_SHAPE: readonly GuitarStringFret[] = [null, null, null, null, null, null];
+export const EMPTY_GUITAR_SHAPE: readonly GuitarStringFret[] = [0, 0, 0, 0, 0, 0];
 
 export type PlayedString = {
   stringIndex: number;
@@ -42,8 +42,10 @@ export function analyzeChordShape(
     chord.notes.map((pitchClass) => [Note.chroma(pitchClass), pitchClass]),
   );
   const playedByChroma = new Map(playedStrings.map((played) => [played.chroma, played.pitchClass]));
+  // Some conventional guitar voicings omit the perfect fifth (for example open C7).
+  const optionalChromas = new Set(target.optionalPitchClasses?.map((note) => Note.chroma(note)));
   const missingPitchClasses = [...expectedByChroma]
-    .filter(([chroma]) => !playedByChroma.has(chroma))
+    .filter(([chroma]) => !playedByChroma.has(chroma) && !optionalChromas.has(chroma))
     .map(([, pitchClass]) => pitchClass);
   const unexpectedPitchClasses = [...playedByChroma]
     .filter(([chroma]) => !expectedByChroma.has(chroma))

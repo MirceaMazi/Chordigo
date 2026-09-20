@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GUITAR_VOICINGS } from "@/lib/music/catalog";
+import { FOUNDATION_VOICINGS, GUITAR_VOICINGS } from "@/lib/music/catalog";
 import type { PracticeObservation, PracticeSession } from "@/lib/practice-history/types";
 import {
   activityStats,
@@ -8,6 +8,7 @@ import {
   getTransitions,
   localDay,
   recommendedTempo,
+  legacyEarnedLevel,
 } from "./curriculum";
 
 function attempts(
@@ -32,9 +33,9 @@ function attempts(
 }
 
 describe("progressive guitar curriculum", () => {
-  it("starts with Em and Am and keeps advanced chords out of a beginner session", () => {
+  it("starts with Em and G and keeps advanced chords out of a beginner session", () => {
     const plan = getCurriculum([]);
-    expect(plan.voicings.map((v) => v.chordSymbol)).toEqual(["Em", "Am"]);
+    expect(plan.voicings.map((v) => v.chordSymbol)).toEqual(["Em", "G"]);
     expect(plan.level).toBe(1);
     expect(getCurriculum([], "returning").level).toBe(2);
   });
@@ -42,18 +43,24 @@ describe("progressive guitar curriculum", () => {
     const em = attempts("e-minor-open", 8);
     expect(getCurriculum(em).level).toBe(1);
     expect(
-      getCurriculum([...em, ...attempts("a-minor-open", 8, { context: "chord-trainer" })]).level,
+      getCurriculum([...em, ...attempts("g-major-open", 8, { context: "chord-trainer" })]).level,
     ).toBe(1);
-    expect(getCurriculum([...em, ...attempts("a-minor-open", 8)]).level).toBe(2);
+    expect(getCurriculum([...em, ...attempts("g-major-open", 8)]).level).toBe(2);
   });
   it("never removes an earned level when a later practice is difficult", () => {
     const history = [
       ...attempts("e-minor-open", 8),
-      ...attempts("a-minor-open", 8),
-      ...attempts("a-minor-open", 20, { result: "reported-miss" }),
+      ...attempts("g-major-open", 8),
+      ...attempts("g-major-open", 20, { result: "reported-miss" }),
     ];
     expect(getCurriculum(history).level).toBe(2);
-    expect(chordEvidence("a-minor-open", history, "progression").steady).toBe(false);
+    expect(chordEvidence("g-major-open", history, "progression").steady).toBe(false);
+  });
+  it("preserves levels earned before the Em/G introduction", () => {
+    const history = [...attempts("e-minor-open", 8), ...attempts("a-minor-open", 8)];
+    expect(legacyEarnedLevel(history)).toBe(2);
+    expect(getCurriculum(history, "beginner", legacyEarnedLevel(history)).level).toBe(2);
+    expect(getCurriculum(history).level).toBe(1);
   });
   it("takes a beginner through every chord without getting stuck on a stage", () => {
     const history: PracticeObservation[] = [];
@@ -65,9 +72,9 @@ describe("progressive guitar curriculum", () => {
         encountered.add(chord.id);
         history.push(...attempts(chord.id, 8));
       }
-      if (encountered.size === GUITAR_VOICINGS.length) break;
+      if (encountered.size === FOUNDATION_VOICINGS.length) break;
     }
-    expect(encountered.size).toBe(GUITAR_VOICINGS.length);
+    expect(encountered.size).toBe(FOUNDATION_VOICINGS.length);
     expect(getCurriculum(history).level).toBe(5);
   });
   it("keeps hints, uncertain evidence and alternate fingerings out of recall mastery", () => {
@@ -86,17 +93,17 @@ describe("progressive guitar curriculum", () => {
     expect(chordEvidence("e-minor-open", attempts("e-minor-open", 1)).mastery).toBeLessThan(20);
   });
   it("distinguishes transition direction and only focuses pairs after repeated evidence", () => {
-    const forward = attempts("a-minor-open", 3, {
+    const forward = attempts("g-major-open", 3, {
       fromVoicingId: "e-minor-open",
       result: "reported-miss",
       bpm: 60,
     });
-    const reverse = attempts("e-minor-open", 3, { fromVoicingId: "a-minor-open", bpm: 70 });
+    const reverse = attempts("e-minor-open", 3, { fromVoicingId: "g-major-open", bpm: 70 });
     const transitions = getTransitions([...forward, ...reverse]);
     expect(transitions).toHaveLength(2);
-    expect(transitions[0]).toMatchObject({ from: "e-minor-open", to: "a-minor-open", accuracy: 0 });
+    expect(transitions[0]).toMatchObject({ from: "e-minor-open", to: "g-major-open", accuracy: 0 });
     expect(transitions[1].bpm).toBe(70);
-    expect(getCurriculum([...forward, ...reverse]).reason).toContain("Em → Am");
+    expect(getCurriculum([...forward, ...reverse]).reason).toContain("Em → G");
   });
   it("makes small tempo changes only with enough explicit reports", () => {
     expect(recommendedTempo(60, 0, 0)).toBe(60);

@@ -19,6 +19,19 @@ describe("backup validation", () => {
       "supported",
     );
   });
+  it("accepts older preferences and validates new feedback options", () => {
+    const legacy = { ...blank.settings[0] } as Record<string, unknown>;
+    for (const key of ["feedbackMode", "chordRepeats", "curriculumVersion", "earnedLevel"])
+      delete legacy[key];
+    expect(parsePracticeBackup(JSON.stringify({ ...blank, settings: [legacy] })).version).toBe(2);
+    for (const patch of [{ feedbackMode: "automatic" }, { chordRepeats: 0 }, { earnedLevel: 6 }]) {
+      expect(() =>
+        parsePracticeBackup(
+          JSON.stringify({ ...blank, settings: [{ ...blank.settings[0], ...patch }] }),
+        ),
+      ).toThrow("preferences");
+    }
+  });
   it("rejects invalid routines and settings before opening a transaction", () => {
     expect(() =>
       parsePracticeBackup(

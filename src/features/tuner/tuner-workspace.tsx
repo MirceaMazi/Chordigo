@@ -2,6 +2,7 @@
 
 import { ArrowRight, Check, Mic, MicOff, ShieldCheck, Volume2 } from "lucide-react";
 import Link from "next/link";
+import { SectionGuide } from "@/components/section-guide";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useReferenceAudio } from "@/lib/music/use-reference-audio";
 import { centsFrom, detectPitch, nearestString, TUNING_STRINGS } from "./pitch";
@@ -10,6 +11,12 @@ export function TunerWorkspace() {
   const [listening, setListening] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [frequency, setFrequency] = useState<number | null>(null);
+  const [lastFrequency, setLastFrequency] = useState<number | null>(null);
+  const [input, setInput] = useState({ level: 0, active: false, silentFor: 0 });
+  const [microphoneName, setMicrophoneName] = useState("");
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [deviceId, setDeviceId] = useState("");
+  const [audioPaused, setAudioPaused] = useState(false);
   const [selected, setSelected] = useState(0);
   const [auto, setAuto] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +28,8 @@ export function TunerWorkspace() {
   } | null>(null);
   const generation = useRef(0);
   const audio = useReferenceAudio();
-  const index = auto && frequency ? nearestString(frequency) : selected;
+  const detected = frequency ?? lastFrequency;
+  const index = auto && detected ? nearestString(detected) : selected;
   const target = TUNING_STRINGS[index];
   const cents = frequency ? centsFrom(frequency, target.frequency) : 0;
   const inTune = frequency !== null && Math.abs(cents) <= 5;
@@ -33,7 +41,8 @@ export function TunerWorkspace() {
       clearInterval(current.timer);
       current.stream.getTracks().forEach((t) => t.stop());
       current.source.disconnect();
-      void current.context.close();
+      current.context.onstatechange = null;
+      void current.context.close().catch(() => {});
       resources.current = null;
     }
   }, []);
@@ -42,6 +51,10 @@ export function TunerWorkspace() {
     setListening(false);
     setRequesting(false);
     setFrequency(null);
+    setLastFrequency(null);
+    setInput({ level: 0, active: false, silentFor: 0 });
+    setAudioPaused(false);
+    setMicrophoneName("");
   }, [cleanup]);
   useEffect(() => {
     const hidden = () => {
@@ -54,8 +67,9 @@ export function TunerWorkspace() {
     };
   }, [cleanup, stop]);
 
-  const start = async () => {
+  const start = async (requestedDevice = deviceId) => {
     audio.stop();
+    stop();
     if (!navigator.mediaDevices?.getUserMedia) {
       setError(
         "Microphone tuning needs HTTPS or localhost and a browser with microphone support. You can still tune by ear with the reference tones below.",
@@ -72,7 +86,12 @@ export function TunerWorkspace() {
       pendingContext = new AudioContext();
       await pendingContext.resume();
       pendingStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          ...(requestedDevice ? { deviceId: { exact: requestedDevice } } : {}),
+        },
       });
       if (token !== generation.current) {
         pendingStream.getTracks().forEach((t) => t.stop());
@@ -84,25 +103,76 @@ export function TunerWorkspace() {
       const analyser = context.createAnalyser();
       analyser.fftSize = 4096;
       source.connect(analyser);
+      // Keep the input graph processing across browsers without playing the mic back.
+      const silentOutput = context.createGain();
+      silentOutput.gain.value = 0;
+      analyser.connect(silentOutput);
+      silentOutput.connect(context.destination);
       const samples = new Float32Array(analyser.fftSize);
       let lastGood = 0;
+      let lastSound = -Infinity;
+      const startedAt = performance.now();
+      let level = 0;
+      let nextPitchAt = 0;
       let recent: number[] = [];
       const timer = window.setInterval(() => {
+        if (context.state !== "running") return;
         analyser.getFloatTimeDomainData(samples);
+        const now = performance.now();
+        const rms = Math.sqrt(
+          samples.reduce((sum, value) => sum + value * value, 0) / samples.length,
+        );
+        // Show all input, including claps and quiet sounds that have no usable pitch.
+        // Overlapping 50 ms samples and a gentle decay keep short sounds visible.
+        const measuredLevel = Math.max(
+          0,
+          Math.min(100, ((20 * Math.log10(Math.max(rms, 1e-8)) + 72) / 60) * 100),
+        );
+        level = Math.max(measuredLevel, level * 0.8);
+        if (rms >= 0.0005) lastSound = now;
+        setInput({
+          level: Math.round(level),
+          active: now - lastSound < 1200,
+          silentFor: (now - Math.max(lastSound, startedAt)) / 1000,
+        });
+        if (now < nextPitchAt) return;
+        nextPitchAt = now + 100;
         const pitch = detectPitch(samples, context.sampleRate);
         if (pitch && pitch.confidence > 0.88) {
           if (recent.length && Math.abs(centsFrom(pitch.frequency, recent[recent.length - 1])) > 80)
             recent = [];
           recent = [...recent.slice(-4), pitch.frequency];
           const sorted = [...recent].sort((a, b) => a - b);
-          setFrequency(sorted[Math.floor(sorted.length / 2)]);
-          lastGood = performance.now();
-        } else if (performance.now() - lastGood > 700) {
+          const smoothed = sorted[Math.floor(sorted.length / 2)];
+          setFrequency(smoothed);
+          setLastFrequency(smoothed);
+          lastGood = now;
+        } else if (now - lastGood > 700) {
           setFrequency(null);
           recent = [];
         }
-      }, 100);
+      }, 50);
       resources.current = { context, stream: pendingStream, source, timer };
+      const updateAudioState = () => {
+        if (token !== generation.current) return;
+        setAudioPaused(context.state !== "running");
+        if (context.state !== "running") {
+          setFrequency(null);
+          setInput({ level: 0, active: false, silentFor: 0 });
+          recent = [];
+        }
+      };
+      context.onstatechange = updateAudioState;
+      updateAudioState();
+      setMicrophoneName(pendingStream.getAudioTracks()[0]?.label || "Default microphone");
+      setDeviceId(pendingStream.getAudioTracks()[0]?.getSettings().deviceId || requestedDevice);
+      void navigator.mediaDevices
+        .enumerateDevices?.()
+        .then((items) => {
+          if (token === generation.current)
+            setDevices(items.filter((item) => item.kind === "audioinput"));
+        })
+        .catch(() => {});
       pendingStream.getAudioTracks().forEach((track) =>
         track.addEventListener("ended", () => {
           if (token === generation.current) {
@@ -120,13 +190,16 @@ export function TunerWorkspace() {
       if (pendingContext?.state !== "closed") await pendingContext?.close();
       if (token !== generation.current) return;
       setRequesting(false);
+      setListening(false);
       const name = cause instanceof Error ? cause.name : "";
       setError(
         name === "NotAllowedError"
           ? "Microphone access wasn’t allowed. Enable it in your browser’s site settings and try again, or tune by ear with the reference tones."
-          : name === "NotFoundError"
-            ? "No microphone was found. Connect one, or use the reference tones to tune by ear."
-            : "The microphone could not start. Check that another app isn’t using it, then try again.",
+          : name === "OverconstrainedError"
+            ? "That microphone is no longer available. Choose another microphone and try again."
+            : name === "NotFoundError"
+              ? "No microphone was found. Connect one, or use the reference tones to tune by ear."
+              : "The microphone could not start. Check that another app isn’t using it, then try again.",
       );
     }
   };
@@ -162,7 +235,15 @@ export function TunerWorkspace() {
                   ? "Waiting for microphone…"
                   : "Microphone off"}
             </span>
-            <button className="text-button" aria-pressed={auto} onClick={() => setAuto(!auto)}>
+            <button
+              className="text-button"
+              aria-label="Auto-detect string"
+              aria-pressed={auto}
+              onClick={() => {
+                setSelected(index);
+                setAuto(!auto);
+              }}
+            >
               {auto ? "Auto-detect string" : "Selected string"}
             </button>
           </div>
@@ -209,13 +290,23 @@ export function TunerWorkspace() {
             <span>Too high ♯</span>
           </div>
           <p className="tuner-guidance" role="status">
-            {frequency
-              ? inTune
-                ? "✓ Right there. That string is in tune."
-                : `${cents < 0 ? "Tighten a little" : "Loosen a little"} · ${Math.abs(Math.round(cents))} cents ${cents < 0 ? "flat" : "sharp"}`
-              : listening
-                ? "Pluck one open string and let it ring."
-                : "A quiet room makes a good tuning room."}
+            {audioPaused
+              ? "Your browser paused audio. Tap Resume tuner audio to continue."
+              : frequency
+                ? inTune
+                  ? "✓ Right there. That string is in tune."
+                  : `${cents < 0 ? "Tighten a little" : "Loosen a little"} · ${Math.abs(Math.round(cents))} cents ${cents < 0 ? "flat" : "sharp"}`
+                : requesting
+                  ? "Allow microphone access, then pluck one open string."
+                  : listening
+                    ? input.active
+                      ? "Sound is reaching the tuner. Let one open string ring."
+                      : input.silentFor >= 6
+                        ? "No sound is reaching the mic. Move closer or choose another microphone below."
+                        : lastFrequency !== null
+                          ? "That note faded. Pluck the string again."
+                          : "Pluck one open string and let it ring."
+                    : "A quiet room makes a good tuning room."}
           </p>
           <button
             className="primary-button"
@@ -228,17 +319,84 @@ export function TunerWorkspace() {
                 ? "Cancel microphone request"
                 : "Enable microphone"}
           </button>
-          <div
-            className="tuner-strings"
-            role="group"
-            aria-label="Standard tuning reference strings"
-          >
+          {listening && audioPaused && (
+            <button
+              className="secondary-button"
+              onClick={() =>
+                void resources.current?.context
+                  .resume()
+                  .catch(() =>
+                    setError(
+                      "Audio could not resume. Stop listening and enable the microphone again.",
+                    ),
+                  )
+              }
+            >
+              Resume tuner audio
+            </button>
+          )}
+          <div className="tuner-input">
+            <div className="tuner-input-heading">
+              <span>Microphone input</span>
+              <span>
+                {listening
+                  ? input.active
+                    ? "Sound detected"
+                    : "Listening · quiet"
+                  : requesting
+                    ? "Waiting for permission"
+                    : "Microphone off"}
+              </span>
+            </div>
+            <div
+              className="tuner-input-meter"
+              role="meter"
+              aria-label="Microphone input level"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={input.level}
+              aria-valuetext={
+                listening ? (input.active ? "Sound detected" : "Quiet") : "Microphone off"
+              }
+            >
+              <span style={{ width: `${input.level}%` }} />
+            </div>
+            {microphoneName && <p className="tuner-input-device">Using {microphoneName}</p>}
+            {devices.length > 0 && (
+              <label className="field tuner-device-select">
+                <span>Microphone</span>
+                <select
+                  value={deviceId}
+                  disabled={requesting}
+                  onChange={(e) => {
+                    setDeviceId(e.target.value);
+                    if (listening) void start(e.target.value);
+                  }}
+                >
+                  <option value="">System default</option>
+                  {devices.map((device, i) => (
+                    <option value={device.deviceId} key={device.deviceId}>
+                      {device.label || `Microphone ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <p className="tuner-input-help">
+              A clap can move this input meter. The tuning needle needs a steady note: pluck one
+              open string and let it ring.
+            </p>
+          </div>
+          <div className="tuner-strings" role="group" aria-label="Choose a string to tune">
             {TUNING_STRINGS.map((string, i) => (
               <button
                 className={`tuner-string ${i === index ? "is-selected" : ""}`}
-                aria-label={`Play ${string.label} reference tone`}
+                aria-label={`Tune ${string.label} string`}
                 aria-pressed={i === index}
-                onClick={() => playReference(i)}
+                onClick={() => {
+                  setSelected(i);
+                  setAuto(false);
+                }}
                 key={string.midi}
               >
                 <small>{6 - i}</small>
@@ -248,23 +406,33 @@ export function TunerWorkspace() {
             ))}
           </div>
           <p className="small-muted">
-            Tap a string to hear its reference tone. Microphone listening stops while a reference
-            plays.
+            Tap a string to keep the tuner focused on it while you play. Auto-detect chooses the
+            nearest standard string for you.
           </p>
           <div className="tuner-reference-mode">
             <button className="text-button" onClick={() => playReference(index)}>
               <Volume2 size={15} />
-              Hear {target.label} again
+              Hear {target.label} reference tone
             </button>
             <button className="text-button" onClick={audio.stop}>
               Stop reference tone
             </button>
           </div>
+          <p className="small-muted">
+            Hearing a reference stops the microphone to avoid measuring the speaker. Enable
+            microphone again when you are ready to play.
+          </p>
         </section>
         <aside className="tuner-tips panel">
           <h2>A good sound starts here.</h2>
           <ol>
-            <li>Hold your guitar comfortably and mute the strings you aren’t tuning.</li>
+            <li>
+              Press Enable microphone and allow access in your browser. Wait for “Listening on this
+              device”.
+            </li>
+            <li>
+              Choose the string you are tuning, starting with thick low E. Mute the other strings.
+            </li>
             <li>Pluck one open string gently. Let the note settle for a moment.</li>
             <li>Turn the matching tuning peg a little at a time. Aim for the center.</li>
             <li>Work from the thickest string to the thinnest, then check all six again.</li>
@@ -278,11 +446,27 @@ export function TunerWorkspace() {
           <div className="tuner-help">
             <h3>No microphone? Use your ears.</h3>
             <p>
-              Tap a string button to hear a reference note. Match it with your open string. The
+              Choose a string and press Hear reference tone. Match it with your open string. The
               numbers run from 6, the thickest, to 1, the thinnest.
             </p>
             <p>This tuner listens for a single note. Play one string at a time.</p>
           </div>
+          <SectionGuide title="Sound detected, but no tuning needle?">
+            <p>
+              The input bar shows any sound, including a clap. A clap has no steady musical pitch.
+              Pluck one open string, without pressing a fret, and let it ring for a second.
+            </p>
+            <p>
+              If the input bar stays still, try another microphone in the selector. Place the guitar
+              near the microphone, and check the browser’s site microphone permission. A headset may
+              be using its own microphone far from the guitar.
+            </p>
+            <p>
+              The needle disappears when the note fades; the microphone keeps listening. Pluck again
+              to take another reading. If the wrong string is detected, select the one you are
+              playing.
+            </p>
+          </SectionGuide>
           <Link className="secondary-button" href="/practice">
             <Check size={16} />
             All tuned up <ArrowRight size={15} />

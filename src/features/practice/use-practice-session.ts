@@ -5,16 +5,25 @@ import {
   createSessionId,
   recordPracticeObservation,
   saveSession,
+  reviewPracticeSession,
 } from "@/lib/practice-history/indexeddb-repository";
 import type { PracticeSession } from "@/lib/practice-history/types";
 import { PendingWrites } from "@/lib/practice-history/pending-writes";
 import { LookaheadMetronome } from "./audio/lookahead-metronome";
 import { createSessionPlan, getSessionCue } from "./domain/session-plan";
 import type { SessionPlan } from "./domain/session-plan";
+import type { ReviewAnswers } from "./domain/session-review";
 
 type SessionInput = Pick<
   PracticeSession,
-  "name" | "mode" | "bpm" | "beatsPerBar" | "voicingIds" | "durations" | "totalChanges"
+  | "name"
+  | "mode"
+  | "bpm"
+  | "beatsPerBar"
+  | "voicingIds"
+  | "durations"
+  | "totalChanges"
+  | "feedbackMode"
 >;
 type Run = {
   session: PracticeSession;
@@ -166,7 +175,12 @@ export function usePracticeSession() {
   const reportResult = useCallback(
     (result: "correct" | "reported-miss") => {
       const current = run.current;
-      if (!current || !engine.current?.isRunning) return;
+      if (
+        !current ||
+        current.session.feedbackMode === "after-session" ||
+        !engine.current?.isRunning
+      )
+        return;
       // Reports belong to the visible chord. There is no hidden previous-beat reassignment.
       const currentBeat = engine.current.getCurrentBeatOrdinal() - current.session.beatsPerBar;
       if (currentBeat < 0 || currentBeat >= current.plan.totalBeats) return;
@@ -211,7 +225,10 @@ export function usePracticeSession() {
             event.target.closest("input, select, textarea, [role='dialog']")))
       )
         return;
-      if (event.code === "Space" || event.code === "ArrowRight") {
+      if (
+        (event.code === "Space" || event.code === "ArrowRight") &&
+        run.current.session.feedbackMode !== "after-session"
+      ) {
         event.preventDefault();
         reportResult(event.code === "Space" ? "reported-miss" : "correct");
       } else if (event.code === "Escape") {
@@ -240,6 +257,16 @@ export function usePracticeSession() {
   const setVolume = (volume: number) => {
     if (run.current) engine.current?.setVolume(volume / 100);
   };
+  const review = async (answers: ReviewAnswers) => {
+    if (!recap || saving) return;
+    const id = recap.id;
+    setSaving(true);
+    await persist(async () => {
+      const reviewed = await reviewPracticeSession(id, answers);
+      if (mounted.current) setRecap((current) => (current?.id === id ? reviewed : current));
+    });
+    if (mounted.current) setSaving(false);
+  };
   return {
     active,
     beat,
@@ -255,6 +282,7 @@ export function usePracticeSession() {
     finish,
     reportResult,
     setVolume,
+    review,
     dismissRecap: () => setRecap(null),
   };
 }

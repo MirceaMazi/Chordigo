@@ -72,11 +72,8 @@ test("keeps other tabs up to date after a history change", async ({ page, contex
   const second = await context.newPage();
   await second.goto("/chords?chord=e-minor-open");
   await second.getByRole("button", { name: "Test this shape" }).click();
-  await second.getByRole("button", { name: "Set Low E string open", exact: true }).click();
   await second.getByRole("button", { name: "Set A string fret 2", exact: true }).click();
   await second.getByRole("button", { name: "Set D string fret 2", exact: true }).click();
-  for (const string of ["G", "B", "High E"])
-    await second.getByRole("button", { name: `Set ${string} string open`, exact: true }).click();
   await second.getByRole("button", { name: "Check chord" }).click();
   await expect(page.locator(".skill-row").filter({ hasText: "E minor" })).toContainText(
     "1 attempt",
@@ -164,4 +161,95 @@ test("recovers queued session writes after a temporary storage failure", async (
   await expect(page.getByText("Session saved on this device.", { exact: false })).toBeVisible();
   await page.getByRole("link", { name: "View progress" }).click();
   await expect(page.locator(".history-item")).toHaveCount(1);
+});
+
+test("keeps tutorials, the horizontal trainer and session reviews accessible on every viewport", async ({
+  page,
+}, testInfo) => {
+  const audit = async (name: string, surface: string) => {
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await page.locator(surface).screenshot({
+      path: `test-results/screenshots/feedback-${name}-${testInfo.project.name}.png`,
+    });
+    await page.addStyleTag({ content: "* { background-image: none !important; }" });
+    expect(
+      (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze())
+        .violations,
+    ).toEqual([]);
+  };
+  await page.goto("/practice");
+  await page.getByRole("button", { name: "Manual", exact: true }).click();
+  await expect(page.getByText("How to make your own routine", { exact: true })).toBeVisible();
+  await audit("manual", ".routine-editor");
+  await page.getByLabel("Beats for chord 1").selectOption("1");
+  await page.getByLabel("Beats for chord 2").selectOption("1");
+  await page.getByRole("button", { name: "Session settings" }).click();
+  await page.getByLabel("Session length").selectOption("8");
+  await page.getByLabel("Tempo in BPM").fill("160");
+  await page.getByRole("button", { name: "Start practicing" }).click();
+  await expect(page.getByRole("button", { name: "Save my review" })).toBeVisible({
+    timeout: 15000,
+  });
+  await audit("review", ".session-recap");
+  await page.getByRole("link", { name: "Chords", exact: true }).click();
+  await page.getByRole("button", { name: "Shape trainer", exact: true }).click();
+  await page.getByRole("button", { name: "Set A string fret 2", exact: true }).click();
+  await page.getByRole("button", { name: "Set D string fret 2", exact: true }).click();
+  await audit("trainer", ".trainer-workbench");
+});
+
+test("rolls back a failed session review and retries without duplicate evidence", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/practice");
+  await page.getByRole("button", { name: "Session settings" }).click();
+  await page.getByLabel("Time on each chord").selectOption("1");
+  await page.getByLabel("Session length").selectOption("8");
+  await page.getByLabel("Tempo in BPM").fill("160");
+  await page.getByRole("button", { name: "Start practicing" }).click();
+  await expect(page.getByText("Session saved on this device.", { exact: false })).toBeVisible({
+    timeout: 15000,
+  });
+  await page.getByRole("button", { name: "All Em chords felt clean" }).click();
+  await page.getByRole("button", { name: "All G chords felt clean" }).click();
+  await page.evaluate(() => {
+    const add = IDBObjectStore.prototype.add;
+    let writes = 0;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      if (this.name === "observations" && ++writes === 2) {
+        IDBObjectStore.prototype.add = add;
+        this.transaction.abort();
+      }
+      return add.apply(this, args);
+    };
+  });
+  await page.getByRole("button", { name: "Save my review" }).click();
+  await expect(page.getByRole("button", { name: "Retry saving" })).toBeVisible();
+  const countObservations = () =>
+    page.evaluate(
+      () =>
+        new Promise<number>((resolve) => {
+          const request = indexedDB.open("chordigo-practice");
+          request.onsuccess = () => {
+            const db = request.result;
+            const count = db.transaction("observations").objectStore("observations").count();
+            count.onsuccess = () => {
+              resolve(count.result);
+              db.close();
+            };
+          };
+        }),
+    );
+  expect(await countObservations()).toBe(0);
+  await page.getByRole("button", { name: "Retry saving" }).click();
+  await expect(page.getByText("Your review is saved.", { exact: false })).toBeVisible();
+  expect(await countObservations()).toBe(8);
+  await expect(page.locator(".recap-metrics strong")).toHaveText(["0:03", "8", "0"]);
+  expect(pageErrors).toEqual([]);
 });
